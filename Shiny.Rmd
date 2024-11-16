@@ -1,0 +1,494 @@
+---
+title: "Shiny_R"
+author: "Haochen_Li"
+date: "2024-11-16"
+output: html_document
+runtime: shiny
+---
+
+# Q: What is the difference between Hadley_1 and Hadley_2?
+
+## Hadley_1
+
+```{r setup, include=FALSE}
+library(shiny)
+ui <- fluidPage(
+  selectInput("dataset", label = "Dataset", choices = ls("package:datasets")),
+  verbatimTextOutput("summary"),
+  tableOutput("table")
+)
+
+
+server <- function(input, output, session) {
+  output$summary <- renderPrint({
+    dataset <- get(input$dataset, "package:datasets")
+    summary(dataset)
+  })
+  
+  output$table <- renderTable({
+    dataset <- get(input$dataset, "package:datasets")
+    dataset
+  })
+}
+
+shinyApp(ui, server)
+```
+
+## Hadley_2
+
+```{r}
+ui <- fluidPage(
+  selectInput("dataset", label = "Dataset", choices = ls("package:datasets")),
+  verbatimTextOutput("summary"),
+  tableOutput("table")
+)
+
+server <- function(input, output, session) {
+  # Create a reactive expression
+  dataset <- reactive({
+    get(input$dataset, "package:datasets")
+  })
+
+  output$summary <- renderPrint({
+    # Use a reactive expression by calling it like a function
+    summary(dataset())
+  })
+  
+  output$table <- renderTable({
+    dataset()
+  })
+}
+shinyApp(ui, server)
+
+```
+
+### In Hadley_1, the dataset is retrieved using get() directly inside each output 
+rendering function (renderPrint and renderTable), resulting in repetitive calls 
+every time the outputs are updated. This approach can lead to inefficiency and 
+redundant computations, making it harder to manage, especially when multiple
+outputs depend on the same dataset. 
+
+### In contrast, Hadley_2 uses a reactive expression to fetch the dataset once 
+when the input changes, storing it as a reusable object that can be accessed 
+by calling the reactive expression as dataset(). This method improves efficiency,
+reduces redundancy, and simplifies the code by centralizing dataset retrieval 
+logic, making it better suited for complex applications.
+
+
+# 2.3.5
+
+# Which of textOutput() and verbatimTextOutput() should each of the following render
+# functions be paired with?
+
+renderPrint(summary(mtcars)): verbatimTextOutput()
+
+renderPrint() is used for displaying textual outputs such as summaries 
+or test results with formatting that preserves whitespace and layout.
+
+renderText("Good morning!"): textOutput()
+
+Reason: renderText() generates simple plain text output suitable for use with 
+textOutput().
+
+renderPrint(t.test(1:5, 2:6)): verbatimTextOutput()
+
+The output of a statistical test is a formatted text object, best displayed with 
+preserved formatting using verbatimTextOutput().
+
+renderText(str(lm(mpg ~ wt, data = mtcars))): textOutput()
+
+Although str() gives detailed information, when combined with renderText(), it 
+is treated as simple text output, best displayed with textOutput().
+
+
+## 2:
+
+```{r}
+library(shiny)
+
+ui <- fluidPage(
+  plotOutput("scatterplot", height = "300px", width = "700px")
+)
+
+server <- function(input, output, session) {
+  output$scatterplot <- renderPlot({
+    plot(runif(5), runif(5), main = "Scatterplot of Random Numbers")
+  }, alt = "A scatterplot of five random numbers.")
+}
+
+shinyApp(ui, server)
+
+```
+
+## 3:
+
+```{r}
+library(shiny)
+library(DT)
+
+ui <- fluidPage(
+  DTOutput("table")
+)
+
+server <- function(input, output, session) {
+  output$table <- renderDT(
+    mtcars,
+    options = list(
+      pageLength = 5,
+      ordering = FALSE,
+      searching = FALSE
+    )
+  )
+}
+
+shinyApp(ui, server)
+```
+
+# 3.3.6
+
+## 1.
+
+Given:
+
+```{r}
+ui <- fluidPage(
+  textInput("name", "What's your name?"),
+  textOutput("greeting")
+)
+```
+
+```{r}
+#Replace input$greeting with output$greeting and ensure the paste0() function references input$name
+server1 <- function(input, output, server) {
+  output$greeting <- renderText({
+    paste0("Hello ", input$name)
+  })
+}
+
+# Move the paste0() logic inside the renderText() function
+server2 <- function(input, output, server) {
+  output$greeting <- renderText({
+    paste0("Hello ", input$name)
+  })
+}
+
+#Wrap the paste0() logic in renderText()
+server3 <- function(input, output, server) {
+  output$greeting <- renderText({
+    paste0("Hello ", input$name)
+  })
+}
+```
+
+## 2:
+
+## Reactive Graph 1
+
+```{r}
+library(DiagrammeR)
+
+DiagrammeR::grViz("
+digraph ReactiveGraph1 {
+  rankdir=TB;
+  node [shape=box, style=filled, color=lightblue];
+  
+  a [label='input$a'];
+  b [label='input$b'];
+  d [label='input$d'];
+  c [label='reactive(c)\\n(c <- input$a + input$b)'];
+  e [label='reactive(e)\\n(e <- c() + input$d)'];
+  f [label='output$f\\n(renderText(e()))'];
+  
+  a -> c;
+  b -> c;
+  c -> e;
+  d -> e;
+  e -> f;
+}
+")
+
+```
+
+
+## Reactive Graph 2
+
+```{r}
+DiagrammeR::grViz("
+digraph ReactiveGraph2 {
+  rankdir=TB;
+  node [shape=box, style=filled, color=lightblue];
+  
+  x1 [label='input$x1'];
+  x2 [label='input$x2'];
+  x3 [label='input$x3'];
+  y1 [label='input$y1'];
+  y2 [label='input$y2'];
+  x [label='reactive(x)\\n(x <- input$x1 + input$x2 + input$x3)'];
+  y [label='reactive(y)\\n(y <- input$y1 + input$y2)'];
+  z [label='output$z\\n(renderText(x() / y()))'];
+  
+  x1 -> x;
+  x2 -> x;
+  x3 -> x;
+  y1 -> y;
+  y2 -> y;
+  x -> z;
+  y -> z;
+}
+")
+
+```
+
+
+## Reactive Graph 3
+
+```{r}
+DiagrammeR::grViz("
+digraph ReactiveGraph3 {
+  rankdir=TB;
+  node [shape=box, style=filled, color=lightblue];
+  
+  a_input [label='input$a'];
+  b_input [label='input$b'];
+  c_input [label='input$c'];
+  d_input [label='input$d'];
+  a [label='reactive(a)\\n(a <- input$a * 10)'];
+  b [label='reactive(b)\\n(b <- a() + input$b)'];
+  c [label='reactive(c)\\n(c <- b() / input$c)'];
+  d [label='reactive(d)\\n(d <- c() + input$d)'];
+  output [label='output'];
+
+  a_input -> a;
+  a -> b;
+  b_input -> b;
+  b -> c;
+  c_input -> c;
+  c -> d;
+  d_input -> d;
+}
+")
+
+```
+
+
+## 3: Why will this code fail?
+
+The code fails because var and range are names of base R functions, and using 
+them for reactive expressions overrides their default behavior, causing conflicts.
+These names are bad for reactives because they can unintentionally break the 
+functionality of the original functions, making debugging difficult. To avoid 
+such issues, use unique and descriptive names for reactive expressions, such as
+selected_var or computed_range.
+
+
+# 4.8
+
+## 1
+
+### Prototype App
+
+```{r}
+DiagrammeR::grViz("
+digraph prototype {
+  rankdir=LR;
+  node [shape=box, style=filled, color=lightblue];
+  code [label='input$code'];
+  selected [label='selected()'];
+  summary [label='summary()'];
+  diag [label='output$diag'];
+  body_part [label='output$body_part'];
+  location [label='output$location'];
+  age_sex [label='output$age_sex'];
+
+  code -> selected;
+  selected -> diag;
+  selected -> body_part;
+  selected -> location;
+  selected -> summary;
+  summary -> age_sex;
+}
+")
+
+```
+
+### Rate vs. Count App
+
+
+```{r}
+DiagrammeR::grViz("
+digraph rate_vs_count {
+  rankdir=LR;
+  node [shape=box, style=filled, color=lightblue];
+  code [label='input$code'];
+  y [label='input$y'];
+  selected [label='selected()'];
+  summary [label='summary()'];
+  diag [label='output$diag'];
+  body_part [label='output$body_part'];
+  location [label='output$location'];
+  age_sex [label='output$age_sex'];
+
+  code -> selected;
+  selected -> diag;
+  selected -> body_part;
+  selected -> location;
+  selected -> summary;
+  y -> summary;
+  summary -> age_sex;
+}
+")
+
+```
+
+### Narrative App
+
+```{r}
+DiagrammeR::grViz("
+digraph narrative {
+  rankdir=LR;
+  node [shape=box, style=filled, color=lightblue];
+  code [label='input$code'];
+  y [label='input$y'];
+  story [label='input$story'];
+  selected [label='selected()'];
+  summary [label='summary()'];
+  diag [label='output$diag'];
+  body_part [label='output$body_part'];
+  location [label='output$location'];
+  age_sex [label='output$age_sex'];
+  narrative [label='output$narrative'];
+
+  code -> selected;
+  selected -> diag;
+  selected -> body_part;
+  selected -> location;
+  selected -> summary;
+  selected -> narrative;
+  y -> summary;
+  summary -> age_sex;
+  story -> narrative;
+}
+")
+
+```
+
+## 2:
+
+Applying fct_lump() before fct_infreq(), the lumped levels
+are not considered in frequency reordering, which may give unexpected results. 
+Conversely, applying fct_infreq() first ensures proper reordering before lumping.
+
+## 3:
+
+```{r}
+# ui <- fluidPage(
+#   fluidRow(
+#     column(8,
+#            selectInput("code", "Product",
+#                        choices = setNames(products$prod_code, products$title),
+#                        width = "100%")
+#     ),
+#     column(2, selectInput("y", "Y axis", c("rate", "count"))),
+#     # Add a numeric input for the number of rows
+#     column(2, numericInput("num_rows", "Number of Rows", value = 5, min = 1, max = 10))
+#   ),
+#   fluidRow(
+#     column(4, tableOutput("diag")),
+#     column(4, tableOutput("body_part")),
+#     column(4, tableOutput("location"))
+#   ),
+#   fluidRow(
+#     column(12, plotOutput("age_sex"))
+#   ),
+#   fluidRow(
+#     column(2, actionButton("story", "Tell me a story")),
+#     column(10, textOutput("narrative"))
+#   )
+# )
+
+```
+
+## 4:
+
+Add actionButton elements for navigation in the fluidRow where the narrative is displayed:
+
+
+```{r}
+# fluidRow(
+#   column(2, actionButton("prev", "Previous")),
+#   column(2, actionButton("next", "Next")),
+#   column(8, textOutput("narrative"))
+# )
+```
+
+To allow users to navigate narratives systematically, we add two buttons: 
+prev_story and next_story. When clicked, these buttons update the current position 
+in the narrative list. To make the navigation circular, we use the modulus operator
+(%%) to ensure the index always stays within the range of available stories.
+
+Key Steps:
+Add Buttons in the UI:
+
+prev_story: For moving to the previous story.
+next_story: For moving to the next story.
+Track the Current Story:
+
+Use a reactive value, story, to store the current story index.
+
+When "Next story" is clicked, increment the index using story((story() %% max_no_stories()) + 1).
+When "Previous story" is clicked, decrement the index, ensuring it wraps around using story(((story() - 2) %% max_no_stories()) + 1).
+Reset on Product Change:
+
+Reset the story index to the first narrative when the product (input$code) changes.
+Render the Narrative:
+
+Use renderText to display the story corresponding to the current index in the list of narratives.
+Highlights:
+Circular Navigation:
+
+Clicking "Next" from the last story wraps to the first.
+Clicking "Previous" from the first story wraps to the last.
+
+
+
+```{r}
+#Navigation
+# observeEvent(input$next_story, {
+#   story((story() %% max_no_stories()) + 1)
+# })
+```
+
+```{r}
+# observeEvent(input$prev_story, {
+#   story(((story() - 2) %% max_no_stories()) + 1)
+# })
+```
+
+```{r}
+# output$narrative <- renderText({
+#   selected()$narrative[story()]
+# })
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
